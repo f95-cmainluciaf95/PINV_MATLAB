@@ -1,0 +1,197 @@
+% PROYECTO 2 / PROJECT 2 : In this project we will see the importance of using different meshes to create and reconstruct simulated data
+
+% Ejercicio 1 / Exercise 1 : solve the well-posed problem using the finite difference method and compare the numerical solution
+% with the exact solution
+L = pi;
+T = 1;
+D = 1;
+M = 40;
+N = 250;
+deltax = L/(M+1);
+x = linspace(0,L,M+1+1);
+f = @(x) 10*sin(2*x);
+deltat = T/(N+1);
+
+d = D*deltat/((deltax)^2);
+diag = sparse(1:M,1:M,(1-2*d)*ones(1,M),M,M);
+ud = sparse(1:M-1,2:M,d,M,M);
+ld = sparse(2:M,1:M-1,d,M,M);
+A = diag + ud + ld;
+u = zeros(M,N+2);
+u(:,1) = f(x(2:M+1));
+
+for j = 2:N+2
+    u(:,j) = A*u(:,j-1);
+end
+
+
+uexact =  @(x,t) 10*exp(-4*t)*sin(2*x);
+uex = uexact(x(2:M+1),T);
+
+maxrel = max(abs(uex-u(:,N+2)'))/max(abs(uex));
+
+fprintf('M es :%.4f\n ', M)
+fprintf('N es :%.4f\n ', N)
+fprintf('deltax es :%.4f\n ', deltax)
+fprintf('delta t es :%.4f\n ', deltat)
+fprintf('d es:%.4f\n',d)
+fprintf('Error relativo en T=0.1 es :%.16f\n ', maxrel)
+
+
+% Ejercicio 2 and 3 / Exercise 2 and 3 : (2) Solving the ill-posed problem using the same mesh and A^-1
+%                                        (3) Solving the illposed problem using the same mesh and different method
+T = 0.4;
+M = 40;
+N = 400;
+deltax = L/(M+1);
+x = linspace(0,L,M+1+1);
+f = @(x) 10*sin(2*x);
+deltat = T/(N+1);
+
+d = D*deltat/((deltax)^2);
+diag = sparse(1:M,1:M,(1-2*d)*ones(1,M),M,M);
+ud = sparse(1:M-1,2:M,d,M,M);
+ld = sparse(2:M,1:M-1,d,M,M);
+A = diag + ud + ld;
+u = zeros(M,N+2);
+u(:,1) = f(x(2:M+1));
+
+for j = 2:N+2
+    u(:,j) = A*u(:,j-1);
+end
+
+
+uexact =  @(x,t) 10*exp(-4*t)*sin(2*x);
+uex = uexact(x(2:M+1),T);
+
+maxrel = max(abs(uex-u(:,N+2)'))/max(abs(uex));
+
+fprintf('M es :%.4f\n ', M)
+fprintf('N es :%.4f\n ', N)
+fprintf('deltax es :%.4f\n ', deltax)
+fprintf('delta t es :%.4f\n ', deltat)
+fprintf('d es:%.4f\n',d)
+fprintf('Error relativo en T=0.1 es :%.16f\n ', maxrel)
+
+
+% Ainv = inv(A); %  Exercise 2: Using A^-1 for solving the inverse problem
+d = D*deltat/((deltax)^2);
+diag = sparse(1:M,1:M,(1+2*d)*ones(1,M),M,M);
+ud = sparse(1:M-1,2:M,-d,M,M);
+ld = sparse(2:M,1:M-1,-d,M,M);
+Ainv = diag + ud + ld;
+uT = u(:,end);
+u2 = [zeros(M,N+1), uT];
+T0 = T-10*deltat;
+for j = N+2:-1:N+2-10
+    u2(:,j-1) = Ainv*u2(:,j);
+end 
+u2 = [zeros(1,N+2); u2;zeros(1,N+2)];
+figure
+plot(x,u2(:,N+1-10))
+hold on 
+plot(x,uexact(x(1:M+2),T0))
+hold off
+
+% Datos con ruido / Noisy data
+eps = 0.0001;
+uT_ruido = uT +eps.*(2*rand(size(uT))-1*ones(size(uT)));
+u2_ruido = [zeros(M,N+1), uT_ruido];
+
+for j = N+1:-1:N+1-10
+    u2_ruido(:,j) = Ainv*u2_ruido(:,j+1);
+end 
+u2_ruido = [zeros(1,N+2); u2_ruido;zeros(1,N+2)];
+
+figure
+plot(x,u2_ruido(:,N+1-10))
+hold on 
+plot(x,uexact(x(1:M+2),T0))
+hold off
+legend('Solucion aproximada con ruido','Solucion exacta')
+
+
+% Usando solución exacta para aproximar en T=0.4 / Using exact solution to approximate at T=0.4
+uT = uexact(x(2:M+1),0.4);      
+u2_fexac = [zeros(M,N+1), uT'];
+
+for j = N+1:-1:N+1-10
+    u2_fexac(:,j) = Ainv*u2_fexac(:,j+1);
+end 
+u2_fexac = [zeros(1,N+2); u2_fexac; zeros(1,N+2)];
+figure
+plot(x,u2_fexac(:,N+1-10))
+hold on 
+plot(x,uexact(x(1:M+2),T0))
+hold off
+
+ 
+% Usando solucion exacta con ruido para aproximar en T=0.4 / Using exact solution to approximate at T=0.4
+eps = 0.0001;
+uT_fexac_ruido = uT +eps.*(2*rand(size(uT))-1*ones(size(uT)));
+u2_fexac_ruido = [zeros(M,N+1), uT_fexac_ruido'];
+
+for j = N+1:-1:N+1-10
+    u2_fexac_ruido(:,j) = Ainv*u2_fexac_ruido(:,j+1);
+end 
+u2_fexac_ruido = [zeros(1,N+2); u2_fexac_ruido;zeros(1,N+2)];
+figure
+plot(x,u2_fexac_ruido(:,N+1-10))
+hold on 
+plot(x,uexact(x(1:M+2),T0))
+hold off
+legend('Solucion aproximada con ruido','Solucion exacta')
+
+
+% Ejercicio 4 / Exercise 4 : Solving the ill-posed problem using different mesh and method
+
+% nueva malla / new mesh
+K=20;
+Mtilde = 35;
+Ntilde = 350;
+x_tilde = linspace(0,L,Mtilde+2);
+t_tilde = linspace(0,T,Ntilde+1);
+deltax_tilde = pi/(Mtilde+1);
+deltat_tilde = T/(Ntilde+1);
+
+
+% Interpoloar la solucion calculada en el primer ejericio para T=0.4 en los
+% puntos x_tilde / Interpolate the solution calculated in the first exercise for T=0.4 at the points x_tilde
+
+uInterp = interp1(x(2:M+1),u(:,end),x_tilde(2:Mtilde+1));
+
+%Ainv = inv(A); % Ejercicio 2 / Exercise 2
+d_tilde = D*deltat_tilde/((deltax_tilde)^2);
+diag = sparse(1:Mtilde,1:Mtilde,(1+2*d_tilde)*ones(1,Mtilde),Mtilde,Mtilde);
+ud = sparse(1:Mtilde-1,2:Mtilde,-d_tilde,Mtilde,Mtilde);
+ld = sparse(2:Mtilde,1:Mtilde-1,-d_tilde,Mtilde,Mtilde);
+Ainv = diag + ud + ld;
+uT = uInterp;
+u2_4 = [zeros(Mtilde,Ntilde+1), uT'];
+T0_tilde = T-K*deltat_tilde;
+for j = Ntilde+2:-1:Ntilde+2-K
+    u2_4(:,j-1) = Ainv*u2_4(:,j);
+end 
+u2_4 = [zeros(1,Ntilde+2); u2_4; zeros(1,Ntilde+2)];
+figure
+plot(x_tilde,u2_4(:,Ntilde+1-K))
+hold on 
+plot(x_tilde,uexact(x_tilde,T0_tilde))
+hold off
+
+% Datos con ruido / Noisy data
+eps = 0.0001;
+uT_ruido = uT +eps.*(2*rand(size(uT))-1*ones(size(uT)));
+u2_4_ruido = [zeros(Mtilde,Ntilde+1), uT_ruido'];
+
+for j = Ntilde+1:-1:Ntilde+1-K
+    u2_4_ruido(:,j) = Ainv*u2_4_ruido(:,j+1);
+end 
+u2_4_ruido = [zeros(1,Ntilde+2); u2_4_ruido;zeros(1,Ntilde+2)];
+figure
+plot(x_tilde,u2_4_ruido(:,Ntilde+1-K))
+hold on 
+plot(x_tilde,uexact(x_tilde,T0_tilde))
+hold off
+legend('Solucion aproximada con ruido','Solucion exacta')
+
