@@ -1,0 +1,332 @@
+% PROJECT 3: INICIAL CONDITION HEAT ECUATION'S RECONSTRUCTION
+clear
+clc
+
+% Nota: Se puede repetir el proceso con datos aleatorios. Para ello descomentar los datos aleatorios
+% Note: The process can be repeated with random data. To do this, uncomment the random data.
+
+% Nota: Se puede repetir la reconstruccion para un instante final mayor T = 1. Para ello, descomentar T = 1
+% y comentar T = 0.4. Se ve que la reconstruccion es todavia menos fiel.
+% Note: A larger time instant, T = 1, can be considered. To do this, uncomment T = 1 and comment out T = 0.4.
+It is observed that the reconstruction is even less accurate.
+
+% Ejercicio 1: Problema directo / Exercise 1: well-posed roblem.
+
+errores = zeros(6,1);
+delta = zeros(6,1);
+condi_esp = zeros(6,1);
+cont = 0;
+L=pi; D=1; 
+% T = 0.1; % only for exercise 1 (well-posed problem)
+% T = 0.4; % Generate data using the well-posed problem and reconstruct the initial condition
+% T = 1; % Larger final time instant
+
+% Metodo de differencias finitas / Finite Difference method
+        Mp2 = 40;
+        Np2 = 1000*T+1;
+        deltaxp2 = L/(Mp2+1);
+        xp2 = linspace(0,L,Mp2+1+1);
+        f0 = 2/pi*xp2.*(xp2<=pi/2)+2/pi*(pi-xp2).*(xp2>pi/2);
+        deltatp2 = T/(Np2+1);
+        
+        dp2 = D*deltatp2/((deltaxp2)^2);
+        diago = sparse(1:Mp2,1:Mp2,(1-2*dp2)*ones(1,Mp2),Mp2,Mp2);
+        ud = sparse(1:Mp2-1,2:Mp2,dp2,Mp2,Mp2);
+        ld = sparse(2:Mp2,1:Mp2-1,dp2,Mp2,Mp2);
+        A = diago + ud + ld;
+        condi_df = condest(A);
+        up2 = zeros(Mp2,Np2+2);
+        up2(:,1) = f0(2:Mp2+1);
+        
+        for j = 2:Np2+2
+            up2(:,j) = A*up2(:,j-1);
+        end
+        
+        up2_final = [0;up2(:,end);0];
+
+
+% Método espectral / Spectral method : Using Fourier series
+for M = [15,30]
+    for N = [5,10,15]
+        cont = cont+1;
+        x = linspace(0,L,M+1);
+        delta(cont) = L/(M+1);
+        y = x;      
+        Kn = zeros(M+1);
+        for i = 1:M+1
+            for j = 1:M+1
+                exponencial = exp((-((1:N)*pi).^2*D*T)./L^2).*sin((1:N).*pi.*x(i)/L).*sin((1:N).*pi.*y(j)/L);
+                Kn(i,j) = (2/L)*sum(exponencial);
+            end
+        end
+        
+        Kn(:,1) = 1/2*Kn(:,1); Kn(:,end) = 1/2*Kn(:,end);
+        Kn = (L/M)*Kn;
+        condiKn=cond(Kn(2:end-1,2:end-1));
+        condi_esp(cont) = condiKn;
+
+        if M == 30 && N == 10
+            Akn = Kn;
+        end
+        
+        f0 = 2/pi*x.*(x<=pi/2)+2/pi*(pi-x).*(x>pi/2);
+        temp_final = Kn*f0';
+      
+        
+        if 1<= cont && cont<= 4
+            figure
+            plot(x,temp_final)
+            hold on
+            plot(xp2,up2_final)
+            grid on
+            legend(['Solución con el método espectral con M=', num2str(M), ' y N=', num2str(N)],'Solución con diferencias finitas','Location','best')
+            hold off
+        end
+
+        % Interpolamos para comparar la solucion espectral con la solucion
+        % calculada con el metodo del proyecto 2 / Comparing spectral and finite difference solutions using interpolation
+        uEspectral = spline(xp2(2:end-1),up2(:,end),x);
+       
+        error_relativo = norm(uEspectral'-temp_final)/norm(temp_final);
+        
+        errores(cont) = error_relativo;
+    end
+end
+
+
+% Hacer tabla / Make table
+M = [15;15;15;30;30;30];
+N = [5;10;15;5;10;15];
+condi_df = condi_df*ones(6,1);
+Tb = table(M,N,delta,errores);
+
+writetable(Tb, 'Tabla 1 Proyecto 3.csv')
+
+
+
+% Ejercicio 2 / Exercise 2 : Solving ill-posed problem with regularization methods
+L = pi;
+D = 1;
+M = 41;
+N = 10000*T+1;
+deltax = L/(M);
+xnew = linspace(0,L,M+1);
+f = @(x) 2/pi*x.*(x<=pi/2)+2/pi*(pi-x).*(x>pi/2);
+deltat = T/(N+1);
+
+d = D*deltat/((deltax)^2);
+diago = sparse(1:M-1,1:M-1,(1-2*d)*ones(1,M-1),M-1,M-1);
+ud = sparse(1:M-2,2:M-1,d,M-1,M-1);
+ld = sparse(2:M-1,1:M-2,d,M-1,M-1);
+A = diago + ud + ld;
+u = zeros(M-1,N+2);
+u(:,1) = f(xnew(2:M));
+
+for j = 2:N+2
+    u(:,j) = A*u(:,j-1);
+end
+
+
+datosabscisas = xnew';
+datosordenadas = [0;u(:,end);0];
+xk= linspace(0,L,31);
+datosInterp = spline(datosabscisas,datosordenadas,xk);
+datos = [xk, datosInterp];
+writematrix(datos, 'TempFinalDFEj2.txt', 'Delimiter','tab')
+save("TempFinalDFEj2.mat","datosabscisas","datosordenadas")
+
+% Resolver Akn*F = datosInterp por el metodo de tikhonov con aprox inicial
+% nula y seleccionando en alpha adecuado /
+% Solve Akn*F = datosInterp by the tikhonov method with zero initial 
+% approximation and selecting at appropriate alpha
+
+eps = 0.01;
+% datosInterp = datosInterp + eps*max(datosInterp)*(2*rand(size(datosInterp))...
+   -1*ones(size(datosInterp)));  % Descomentar para introducir pertubacion aleatoria a los datos / Uncomment to introduce random disturbance to the data
+
+% Método de Tikhonov seleccionando alpha con el principio de discrepancia de mozorov / 
+% Tikhonov's method selecting alpha with the Mozorov discrepancy principle
+alpha = 0.001:0.001:1;
+alpha_optimo = 0.0001;
+for k = 1:length(alpha)
+    ATik = Akn'*Akn+alpha(k)*eye(size(Akn));
+    bTik = Akn'*datosInterp';
+    sol = ATik\bTik;
+    difk = norm(Akn*sol-datosInterp');
+    
+    if eps*norm(datosInterp)<difk && difk < 1.2*eps*norm(datosInterp) && alpha(k) > alpha_optimo  % Principio de discrepancia de Mozorov / Morozov's discrepancy principle
+        alpha_optimo = alpha(k);
+        sol_alpha_optimo = sol;
+        condi = cond(ATik);
+    end      
+end
+
+% Comparamos con la solucion exacta / Comparison with the exact solution
+fexact = @(x) 2/pi*x.*(x<=pi/2)+2/pi*(pi-x).*(x>pi/2);
+figure
+plot(xk,fexact(xk))
+hold on
+plot(xk,sol_alpha_optimo)
+hold off
+grid on
+legend('Solucion exacta en T_0', 'Solucion aproximada con Tikhonov en T_0')
+
+
+% Tikhonov iterado 1 y 2 / Tikhonov iterated 1 and 2
+soluciones = [sol_alpha_optimo,zeros(length(sol_alpha_optimo),1),zeros(length(sol_alpha_optimo),1)];
+ATik = Akn'*Akn+alpha_optimo*eye(size(Akn));
+for i = [2,3]
+bTik = Akn'*datosInterp' + alpha_optimo*soluciones(:,i-1);
+soluciones(:,i) = ATik\bTik;
+end
+
+figure
+grid on
+plot(xk,fexact(xk))
+hold on
+plot(xk,soluciones(:,1))
+plot(xk,soluciones(:,2))
+plot(xk,soluciones(:,3))
+grid on
+hold off
+legend('solucion exacta en T_0','Solucion aproximada con Tikhonov','Solucion aproximada en con Tikhonov 1','Solucion aproximada con Tikhonov 2','Location','best')
+
+% Método de Lardy / Lardy's Method
+maxit = 500;
+ATik = Akn'*Akn+alpha_optimo*eye(size(Akn));
+solucion_Lardy = sol_alpha_optimo;
+for i = 1:maxit
+    bTik = Akn'*datosInterp' + alpha_optimo*solucion_Lardy;
+    solucion_Lardy = ATik\bTik;
+    if norm(Akn*solucion_Lardy-datosInterp')<1.2*eps
+        break
+    end
+end
+
+epsi = 0.01;
+%epsi = 2*eps; % Para datos perturbados / Uncomment for perturbated data
+cont_Lardy = 0;
+solucion_Lardy = sol_alpha_optimo;
+while norm(Akn*solucion_Lardy-datosInterp')>1.2*epsi*norm(datosInterp')
+    cont_Lardy = cont_Lardy + 1;
+    bTik = Akn'*datosInterp' + alpha_optimo*solucion_Lardy;
+    solucion_Lardy = ATik\bTik;
+end
+figure
+grid on
+plot(xk,fexact(xk))
+hold on
+plot(xk,soluciones(:,1))
+plot(xk,soluciones(:,2))
+plot(xk,soluciones(:,3))
+plot(xk,solucion_Lardy)
+grid on
+hold off
+legend('solucion exacta en T_0','Solucion aproximada con Tikhonov', ...
+    'Solucion aproximada en con Tikhonov 1', ...
+    'Solucion aproximada con Tikhonov 2', ...
+    'Solucion por el método de Lardy','Location','best')
+
+
+% Metodo de landweber / Landweber's method
+for mu = [0.1/norm(Akn'*Akn),0.5/norm(Akn'*Akn),0.95/norm(Akn'*Akn),1.95/norm(Akn'*Akn),2.1/norm(Akn'*Akn)]
+figure
+hold on
+iter = [10,500,10000];
+for k = iter
+    Dmp1 = zeros(size(datosInterp'));
+    for i = 1:k
+            Dmp1 = Dmp1-mu*Akn'*(Akn*Dmp1-datosInterp');
+    end
+    plot(xk,Dmp1,'DisplayName',['Landweber:',num2str(k),'iteraciones'])
+end
+
+plot(xk, fexact(xk), 'k--', 'LineWidth', 1.5, 'DisplayName', 'Solución exacta')
+
+hold off
+grid on
+legend('Location','best')
+title('Método de Landweber con mu =',num2str(mu))
+
+% figure
+% plot(xk,fexact(xk))
+% hold on
+% plot(xk,Dm)
+% hold off
+% grid on
+% legend('Solucion exacta','Solucion calculada con el metodo de landweber')
+
+end
+
+
+% Metodo de Landweber hasta que alcanza convergencia / Landweber's method until convergence is reached
+epsi = 0.1;
+% epsi = 2*eps; % Para datos perturbados / Uncomment for perturbated data
+
+mu = 0.95/norm(Akn'*Akn);
+Dmp1 = zeros(size(datosInterp'));
+cont_Landweber = 0;
+while norm(Akn*Dmp1-datosInterp')>1.2*epsi*norm(datosInterp')
+    cont_Landweber = cont_Landweber +1;
+    Dmp1 = Dmp1-mu*Akn'*(Akn*Dmp1-datosInterp');
+end
+
+
+
+
+% Descomposicion en valores singulares / Singular value decomposition
+[U,S,V] = svd(Akn,"econ");
+
+d = diag(S);
+
+av = 1/d(1)*d;
+plot(log(av),'x','LineWidth',1.5)
+
+av_masgrandes = av(av>1.e-16);
+num = numel(av_masgrandes);
+r = rank(Akn);
+
+for k = 1:r
+    % TSVD
+    Uk = U(:, 1:k);
+    Sk = S(1:k, 1:k);
+    diagonal_truncada = diag(Sk);
+    Vk = V(:, 1:k);
+    S_pseudoinversa = sparse(1:k,1:k,1./diag(Sk),k,k);
+    solucion_SVD = Vk*S_pseudoinversa*Uk'*datosInterp';
+    
+    % WSVD / Weighted SVD
+    % Construimos una versión suavizada de la pseudoinversa / We construct a smoothed version of the pseudoinverse
+    % Se mantienen los k primeros valores exactos y suavizamos los restantes / The first k values ​​are kept exact and the remaining values ​​are smoothed.
+    S_WSVD_inv = zeros(r,r);
+    for i = 1:r
+        if i <= k
+            S_WSVD_inv(i,i) = 1/d(i); % primeros k valores exactos / first k exact values
+        else
+            S_WSVD_inv(i,i) = 1/d(k); % valores pequeños suavizados / small smoothed values
+        end
+    end
+
+    solucion_WSVD = V(:,1:r)*S_WSVD_inv*U(:,1:r)'*datosInterp';
+   
+    figure
+    plot(xk,fexact(xk),'LineWidth',1.5)
+    hold on
+    plot(xk,solucion_SVD,'LineWidth',1.5)
+    plot(xk,solucion_WSVD,'LineWidth',1.5)
+    grid on
+    hold off
+    legend('Solución exacta', 'Solución con TSVD', 'Solución con WSVD')
+    title(['Reconstrucción usando SVD truncada y SVD con pesos con k =',num2str(k)])
+    clear solucion_SVD
+end
+
+% Comprobación de cual sería el numero óptimo de valores singulares que se
+% deberian de considerar / Checking what the optimal number of singular values ​​
+% that should be considered would be.
+tol = 1.e-6;
+k_opt = max(find(d>tol))
+
+
+
+
